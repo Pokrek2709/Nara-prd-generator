@@ -50,4 +50,3 @@ See [backend/README.md](backend/README.md) and [PRD-Generator-App.md](PRD-Genera
 - Pro plan and pricing information are read-only until billing is integrated.
 - Sharing creates a seven-day link; the backend supports revocation. The AI provider must be configured for clarification, generation, and AI actions.
 - The browser editor saves complete PRD content with a debounce and version check. Proposed AI content remains in a review panel until the user applies it.
-#
