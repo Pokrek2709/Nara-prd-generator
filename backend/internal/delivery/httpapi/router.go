@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,11 +20,15 @@ import (
 	"github.com/your-org/prd-generator/backend/internal/service"
 )
 
+type RateLimiter interface {
+	Allow(key string, max int, window time.Duration) bool
+}
+
 type API struct {
 	cfg    config.Config
 	log    *slog.Logger
 	svc    *service.Service
-	limits *limiter
+	limits RateLimiter
 }
 
 func New(cfg config.Config, log *slog.Logger, svc *service.Service) *gin.Engine {
@@ -137,9 +142,26 @@ func (a *API) cors() gin.HandlerFunc {
 		c.Next()
 	}
 }
+func normalizeIP(ipStr string) string {
+	parsed := net.ParseIP(strings.TrimSpace(ipStr))
+	if parsed == nil {
+		return ipStr
+	}
+	if v4 := parsed.To4(); v4 != nil {
+		return v4.String()
+	}
+	// IPv6: mask to /64 subnet
+	mask := net.CIDRMask(64, 128)
+	return parsed.Mask(mask).String()
+}
+
 func (a *API) rateLimit(max int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !a.limits.allow(c.ClientIP(), max, window) {
+		key := "ip:" + normalizeIP(c.ClientIP())
+		if uid := userID(c); uid != "" {
+			key = "user:" + uid
+		}
+		if !a.limits.Allow(key, max, window) {
 			fail(c, http.StatusTooManyRequests, "rate_limited", "Terlalu banyak permintaan. Coba lagi nanti.")
 			return
 		}
@@ -770,6 +792,7 @@ func (a *API) testAISettings(c *gin.Context) {
 	if !bind(c, &in) {
 		return
 	}
+	in.UserID = userID(c)
 	if err := a.svc.TestAISettings(c.Request.Context(), in); err != nil {
 		fail(c, http.StatusBadRequest, "ai_test_failed", fmt.Sprintf("Koneksi gagal: %v", err))
 		return
@@ -881,7 +904,8 @@ type limiter struct {
 }
 
 func newLimiter() *limiter { return &limiter{hits: make(map[string][]time.Time)} }
-func (l *limiter) allow(key string, max int, window time.Duration) bool {
+
+func (l *limiter) Allow(key string, max int, window time.Duration) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
@@ -913,4 +937,8 @@ func (l *limiter) allow(key string, max int, window time.Duration) bool {
 	}
 	l.hits[key] = append(old, now)
 	return true
+}
+
+func (l *limiter) allow(key string, max int, window time.Duration) bool {
+	return l.Allow(key, max, window)
 }

@@ -8,6 +8,19 @@ interface MermaidProps {
   className?: string;
 }
 
+function sanitizeSvg(svg: string): string {
+  if (!svg) return "";
+  return svg
+    // Remove script tags and contents
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    // Remove inline event handlers (on*)
+    .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, "")
+    // Remove javascript: href or xlink:href
+    .replace(/(?:href|xlink:href)\s*=\s*(?:'javascript:[^']*'|"javascript:[^"]*")/gi, "")
+    // Remove data: text/html URIs
+    .replace(/(?:href|xlink:href)\s*=\s*(?:'data:text\/html[^']*'|"data:text\/html[^"]*")/gi, "");
+}
+
 export function MermaidChart({ chart, className = "" }: MermaidProps) {
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -46,14 +59,14 @@ export function MermaidChart({ chart, className = "" }: MermaidProps) {
             secondaryColor: "#f7f8f4",
             tertiaryColor: "#ffffff",
           },
-          securityLevel: "loose",
+          securityLevel: "strict",
         });
 
         const uniqueId = `mermaid-${Math.random().toString(36).substring(2, 9)}`;
         const { svg: renderedSvg } = await mermaid.render(uniqueId, cleanChart);
 
         if (isMounted) {
-          setSvg(renderedSvg);
+          setSvg(sanitizeSvg(renderedSvg));
           setLoading(false);
         }
       } catch (err: unknown) {

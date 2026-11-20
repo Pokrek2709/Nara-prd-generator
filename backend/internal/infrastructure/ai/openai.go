@@ -14,6 +14,7 @@ import (
 
 	"github.com/your-org/prd-generator/backend/internal/config"
 	"github.com/your-org/prd-generator/backend/internal/domain"
+	"github.com/your-org/prd-generator/backend/internal/infrastructure/security"
 )
 
 type Provider struct {
@@ -30,6 +31,10 @@ func New(cfg config.Config) *Provider {
 }
 
 func NewCustom(provider, baseURL, apiKey, model string, timeout time.Duration) *Provider {
+	return NewCustomWithPolicy(provider, baseURL, apiKey, model, timeout, false)
+}
+
+func NewCustomWithPolicy(provider, baseURL, apiKey, model string, timeout time.Duration, allowLocalhost bool) *Provider {
 	if timeout <= 0 {
 		timeout = 45 * time.Second
 	}
@@ -47,7 +52,13 @@ func NewCustom(provider, baseURL, apiKey, model string, timeout time.Duration) *
 		baseURL:  strings.TrimRight(baseURL, "/"),
 		apiKey:   apiKey,
 		model:    model,
-		client:   &http.Client{Timeout: timeout},
+		client: &http.Client{
+			Timeout:   timeout,
+			Transport: &http.Transport{DialContext: security.SafeDialContext(allowLocalhost)},
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -420,24 +431,64 @@ Balas HANYA dengan JSON valid persis dengan struktur berikut:
 }
 
 func normalizePRDDocument(doc *domain.PRDDocument) {
-	if doc.VisionAndGoals == nil { doc.VisionAndGoals = []string{} }
-	if doc.TargetAudience == nil { doc.TargetAudience = []string{} }
-	if doc.UseCases == nil { doc.UseCases = []string{} }
-	if doc.UserStories == nil { doc.UserStories = []domain.Requirement{} }
-	if doc.FunctionalRequirements == nil { doc.FunctionalRequirements = []domain.Requirement{} }
-	if doc.NonFunctionalRequirements == nil { doc.NonFunctionalRequirements = []domain.Requirement{} }
-	if doc.FeatureSpecifications == nil { doc.FeatureSpecifications = []string{} }
-	if doc.UserJourney == nil { doc.UserJourney = []string{} }
-	if doc.Scope == nil { doc.Scope = []string{} }
-	if doc.OutOfScope == nil { doc.OutOfScope = []string{} }
-	if doc.BusinessRules == nil { doc.BusinessRules = []string{} }
-	if doc.DataRequirements == nil { doc.DataRequirements = []string{} }
-	if doc.APIRequirements == nil { doc.APIRequirements = []string{} }
-	if doc.SecurityAndPrivacy == nil { doc.SecurityAndPrivacy = []string{} }
-	if doc.SuccessMetrics == nil { doc.SuccessMetrics = []string{} }
-	if doc.DependenciesAndConstraints == nil { doc.DependenciesAndConstraints = []string{} }
-	if doc.Risks == nil { doc.Risks = []string{} }
-	if doc.Milestones == nil { doc.Milestones = []string{} }
-	if doc.OpenQuestions == nil { doc.OpenQuestions = []string{} }
-	if doc.Assumptions == nil { doc.Assumptions = []string{} }
+	if doc.VisionAndGoals == nil {
+		doc.VisionAndGoals = []string{}
+	}
+	if doc.TargetAudience == nil {
+		doc.TargetAudience = []string{}
+	}
+	if doc.UseCases == nil {
+		doc.UseCases = []string{}
+	}
+	if doc.UserStories == nil {
+		doc.UserStories = []domain.Requirement{}
+	}
+	if doc.FunctionalRequirements == nil {
+		doc.FunctionalRequirements = []domain.Requirement{}
+	}
+	if doc.NonFunctionalRequirements == nil {
+		doc.NonFunctionalRequirements = []domain.Requirement{}
+	}
+	if doc.FeatureSpecifications == nil {
+		doc.FeatureSpecifications = []string{}
+	}
+	if doc.UserJourney == nil {
+		doc.UserJourney = []string{}
+	}
+	if doc.Scope == nil {
+		doc.Scope = []string{}
+	}
+	if doc.OutOfScope == nil {
+		doc.OutOfScope = []string{}
+	}
+	if doc.BusinessRules == nil {
+		doc.BusinessRules = []string{}
+	}
+	if doc.DataRequirements == nil {
+		doc.DataRequirements = []string{}
+	}
+	if doc.APIRequirements == nil {
+		doc.APIRequirements = []string{}
+	}
+	if doc.SecurityAndPrivacy == nil {
+		doc.SecurityAndPrivacy = []string{}
+	}
+	if doc.SuccessMetrics == nil {
+		doc.SuccessMetrics = []string{}
+	}
+	if doc.DependenciesAndConstraints == nil {
+		doc.DependenciesAndConstraints = []string{}
+	}
+	if doc.Risks == nil {
+		doc.Risks = []string{}
+	}
+	if doc.Milestones == nil {
+		doc.Milestones = []string{}
+	}
+	if doc.OpenQuestions == nil {
+		doc.OpenQuestions = []string{}
+	}
+	if doc.Assumptions == nil {
+		doc.Assumptions = []string{}
+	}
 }

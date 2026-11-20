@@ -9,11 +9,11 @@ import (
 )
 
 type Config struct {
-	Environment, HTTPAddr, DatabaseURL, JWTSecret, FrontendOrigin, PublicAPIURL string
-	TrustedProxies                                                              []string
-	AccessTokenTTL, RefreshTokenTTL, AITimeout                                  time.Duration
-	CookieSecure                                                                bool
-	AIBaseURL, AIAPIKey, AIModel                                                string
+	Environment, HTTPAddr, DatabaseURL, JWTSecret, EncryptionKey, FrontendOrigin, PublicAPIURL string
+	TrustedProxies                                                                             []string
+	AccessTokenTTL, RefreshTokenTTL, AITimeout                                                 time.Duration
+	CookieSecure                                                                               bool
+	AIBaseURL, AIAPIKey, AIModel                                                               string
 }
 
 func Load() (Config, error) {
@@ -39,6 +39,7 @@ func Load() (Config, error) {
 	if len(c.JWTSecret) < 32 {
 		return c, fmt.Errorf("JWT_SECRET must contain at least 32 characters")
 	}
+	c.EncryptionKey = env("ENCRYPTION_KEY", c.JWTSecret)
 	secure, err := strconv.ParseBool(env("COOKIE_SECURE", strconv.FormatBool(c.Environment == "production")))
 	if err != nil {
 		return c, fmt.Errorf("COOKIE_SECURE: %w", err)

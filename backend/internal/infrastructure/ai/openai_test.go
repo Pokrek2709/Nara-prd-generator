@@ -41,6 +41,29 @@ func TestActionRejectsUnknownActionWithoutProviderCall(t *testing.T) {
 	}
 }
 
+func TestCustomProviderDoesNotFollowRedirects(t *testing.T) {
+	provider := NewCustomWithPolicy("openai", "https://provider.invalid/v1", "test-key", "test-model", time.Second, false)
+	calls := 0
+	provider.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		header := make(http.Header)
+		header.Set("Location", "http://127.0.0.1:8080/internal")
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Header:     header,
+			Body:       io.NopCloser(strings.NewReader("redirect")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := provider.TestConnection(context.Background()); err == nil {
+		t.Fatal("expected redirect response to be rejected")
+	}
+	if calls != 1 {
+		t.Fatalf("expected exactly one request, got %d", calls)
+	}
+}
+
 func TestGenerateStreamWithEventStream(t *testing.T) {
 	provider := New(config.Config{AIAPIKey: "test-key", AIBaseURL: "https://provider.invalid/v1", AIModel: "test-model", AITimeout: time.Second})
 	provider.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -126,5 +149,3 @@ func TestResolveSettings(t *testing.T) {
 		t.Errorf("expected model override to take precedence: got %s", model)
 	}
 }
-
-
