@@ -82,6 +82,16 @@ export default function NewProjectPage() {
 
   const generationKey = useRef<string | null>(null);
   const streamEndRef = useRef<HTMLDivElement>(null);
+  const chunkBufferRef = useRef<string>("");
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     Promise.all([api.getAIProviders(), api.getAISettings()])
@@ -99,7 +109,7 @@ export default function NewProjectPage() {
 
   useEffect(() => {
     if (streamEndRef.current) {
-      streamEndRef.current.scrollIntoView({ behavior: "smooth" });
+      streamEndRef.current.scrollIntoView({ behavior: "auto" });
     }
   }, [streamChunks]);
 
@@ -185,6 +195,11 @@ export default function NewProjectPage() {
       setStep(3);
       setStreamingStep("init");
       setStreamingMessage("Menghubungkan ke layanan AI generator...");
+      chunkBufferRef.current = "";
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
       setStreamChunks("");
 
       const prd = await api.streamPRD(
@@ -200,8 +215,19 @@ export default function NewProjectPage() {
             setStreamingStep(event.step);
             setStreamingMessage(event.message);
           } else if (event.type === "chunk") {
-            setStreamChunks((prev) => prev + event.chunk);
+            chunkBufferRef.current += event.chunk;
+            if (!flushTimerRef.current) {
+              flushTimerRef.current = setTimeout(() => {
+                setStreamChunks(chunkBufferRef.current);
+                flushTimerRef.current = null;
+              }, 50);
+            }
           } else if (event.type === "done") {
+            if (flushTimerRef.current) {
+              clearTimeout(flushTimerRef.current);
+              flushTimerRef.current = null;
+            }
+            setStreamChunks(chunkBufferRef.current);
             setStreamingStep("done");
             setStreamingMessage("Dokumen PRD berhasil dibuat dan disimpan!");
             setGeneratedPRD(event.prd);

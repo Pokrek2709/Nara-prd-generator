@@ -9,3 +9,4 @@ backend/.env.local
 .env
 .env.local
 *.log
+*.tsbuildinfo

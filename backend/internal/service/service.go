@@ -19,6 +19,7 @@ import (
 	"github.com/your-org/prd-generator/backend/internal/domain"
 	"github.com/your-org/prd-generator/backend/internal/infrastructure/ai"
 	"github.com/your-org/prd-generator/backend/internal/infrastructure/postgres"
+	"github.com/your-org/prd-generator/backend/internal/infrastructure/security"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -440,11 +441,17 @@ func (s *Service) resolveAIProvider(ctx context.Context, userID, overrideProvide
 	if s.aiSettings != nil && userID != "" {
 		settings, err := s.aiSettings.GetAISettings(ctx, userID)
 		if err == nil && settings != nil {
+			if settings.APIKey != "" {
+				if dec, err := security.Decrypt(settings.APIKey, s.cfg.EncryptionKey); err == nil {
+					settings.APIKey = dec
+				}
+			}
 			userSettings = settings
 		}
 	}
 	provider, baseURL, apiKey, model := ai.ResolveSettings(userSettings, overrideProvider, overrideModel, s.cfg)
-	client := ai.NewCustom(provider, baseURL, apiKey, model, s.cfg.AITimeout)
+	allowLocalhost := s.cfg.Environment != "production" || provider == "ollama"
+	client := ai.NewCustomWithPolicy(provider, baseURL, apiKey, model, s.cfg.AITimeout, allowLocalhost)
 	return client, model
 }
 
@@ -469,10 +476,19 @@ func (s *Service) GetAISettings(ctx context.Context, userID string) (*domain.Use
 		}
 		return nil, err
 	}
-	if len(settings.APIKey) > 8 {
-		settings.APIKey = settings.APIKey[:4] + "..." + settings.APIKey[len(settings.APIKey)-4:]
-	} else if len(settings.APIKey) > 0 {
+	// Decrypt stored ciphertext before masking for client response
+	rawKey := settings.APIKey
+	if rawKey != "" {
+		if dec, err := security.Decrypt(rawKey, s.cfg.EncryptionKey); err == nil {
+			rawKey = dec
+		}
+	}
+	if len(rawKey) > 8 {
+		settings.APIKey = rawKey[:4] + "..." + rawKey[len(rawKey)-4:]
+	} else if len(rawKey) > 0 {
 		settings.APIKey = "••••••••"
+	} else {
+		settings.APIKey = ""
 	}
 	return settings, nil
 }
@@ -495,11 +511,26 @@ func (s *Service) UpdateAISettings(ctx context.Context, userID string, in domain
 		in.Model = "gpt-4o-mini"
 	}
 
+	// Validate custom base URL for SSRF protection
+	if in.BaseURL != "" {
+		allowLocalhost := s.cfg.Environment != "production" || in.Provider == "ollama"
+		if err := security.ValidateSafeBaseURL(in.BaseURL, allowLocalhost); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		}
+	}
+
 	if strings.Contains(in.APIKey, "...") || strings.Contains(in.APIKey, "•") {
 		existing, err := s.aiSettings.GetAISettings(ctx, userID)
 		if err == nil && existing != nil {
-			in.APIKey = existing.APIKey
+			in.APIKey = existing.APIKey // Retain existing encrypted key from database
 		}
+	} else if in.APIKey != "" {
+		// Encrypt newly submitted API key using AES-256-GCM
+		encryptedKey, err := security.Encrypt(in.APIKey, s.cfg.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt api key: %w", err)
+		}
+		in.APIKey = encryptedKey
 	}
 
 	if err := s.aiSettings.UpsertAISettings(ctx, &in); err != nil {
@@ -509,8 +540,28 @@ func (s *Service) UpdateAISettings(ctx context.Context, userID string, in domain
 }
 
 func (s *Service) TestAISettings(ctx context.Context, in domain.UserAISettings) error {
+	in.BaseURL = strings.TrimSpace(in.BaseURL)
+	if in.BaseURL != "" {
+		allowLocalhost := s.cfg.Environment != "production" || in.Provider == "ollama"
+		if err := security.ValidateSafeBaseURL(in.BaseURL, allowLocalhost); err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		}
+	}
+
+	// If API key is masked and userID is available, decrypt existing key from DB
+	if strings.Contains(in.APIKey, "...") || strings.Contains(in.APIKey, "•") {
+		if s.aiSettings != nil && in.UserID != "" {
+			if existing, err := s.aiSettings.GetAISettings(ctx, in.UserID); err == nil && existing != nil {
+				if dec, err := security.Decrypt(existing.APIKey, s.cfg.EncryptionKey); err == nil {
+					in.APIKey = dec
+				}
+			}
+		}
+	}
+
 	provider, baseURL, apiKey, model := ai.ResolveSettings(&in, in.Provider, in.Model, s.cfg)
-	client := ai.NewCustom(provider, baseURL, apiKey, model, 15*time.Second)
+	allowLocalhost := s.cfg.Environment != "production" || provider == "ollama"
+	client := ai.NewCustomWithPolicy(provider, baseURL, apiKey, model, 15*time.Second, allowLocalhost)
 	return client.TestConnection(ctx)
 }
 

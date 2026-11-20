@@ -8,53 +8,7 @@ import { api, type PRD } from "@/lib/api";
 import { Badge, Card } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { MermaidChart } from "@/components/mermaid";
-
-function toMarkdown(prd: PRD) {
-  const content = prd.content || {};
-  return Object.entries(content)
-    .filter(
-      ([key, value]) =>
-        key !== "customSections" &&
-        value !== undefined &&
-        value !== null &&
-        value !== "" &&
-        (!Array.isArray(value) || value.length > 0)
-    )
-    .map(([key, value]) => {
-      const title = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
-      const body = Array.isArray(value)
-        ? value
-            .map((item) => {
-              if (item && typeof item === "object") {
-                const req = item as {
-                  id?: string;
-                  description?: string;
-                  priority?: string;
-                  acceptanceCriteria?: string[];
-                };
-                return `- **${req.id || ""} ${req.description || ""}**${
-                  req.priority ? ` (${req.priority})` : ""
-                }${
-                  req.acceptanceCriteria?.length
-                    ? `\n${req.acceptanceCriteria.map((c) => `  - ${c}`).join("\n")}`
-                    : ""
-                }`;
-              }
-              return `- ${String(item)}`;
-            })
-            .join("\n")
-        : String(value);
-      return `## ${title}\n\n${body}`;
-    })
-    .concat(
-      Array.isArray(content.customSections)
-        ? (content.customSections as Array<{ title: string; body: string }>).map(
-            (section) => `## ${section.title}\n\n${section.body || ""}`
-          )
-        : []
-    )
-    .join("\n\n");
-}
+import { prdToMarkdown } from "@/lib/markdown";
 
 export default function SharedPRDPage() {
   const { token } = useParams<{ token: string }>();
@@ -144,7 +98,7 @@ export default function SharedPRDPage() {
                     },
                   }}
                 >
-                  {`# ${prd.title}\n\n${toMarkdown(prd)}`}
+                  {prdToMarkdown(prd.title, prd.content)}
                 </ReactMarkdown>
               </article>
 

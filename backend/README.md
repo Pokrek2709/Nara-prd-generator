@@ -51,7 +51,7 @@ The migrations seed `ai_plans` with Free (10 AI calls/month) and Pro (1,000/mont
 
 ## Environment
 
-See `.env.example`. `JWT_SECRET` must be at least 32 characters. Set `COOKIE_SECURE=true` behind HTTPS in production. `FRONTEND_ORIGIN` is the single allowed browser origin; `PUBLIC_API_URL` is used to construct share URLs; `TRUSTED_PROXIES` optionally lists trusted proxy CIDRs for client-IP rate limiting. Keep database and AI credentials in a secret manager in deployed environments.
+See `.env.example`. `JWT_SECRET` must be at least 32 characters. Set a separate, stable `ENCRYPTION_KEY` to protect AI provider credentials stored in the database; changing it makes existing encrypted credentials unreadable. If omitted, the service falls back to `JWT_SECRET` for backwards compatibility. Set `COOKIE_SECURE=true` behind HTTPS in production. `FRONTEND_ORIGIN` is the single allowed browser origin; `PUBLIC_API_URL` is used to construct share URLs; `TRUSTED_PROXIES` optionally lists trusted proxy CIDRs for client-IP rate limiting. Keep database and AI credentials in a secret manager in deployed environments.
 
 ## Verification
 
