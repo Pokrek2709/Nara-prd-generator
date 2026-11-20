@@ -356,7 +356,9 @@ func (r *Repository) RestoreVersion(ctx context.Context, id, user, versionID str
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	var content []byte
+	// Scan JSONB as text so pgx can encode it as a JSON string parameter on
+	// the restore UPDATE, including when the connection uses simple protocol.
+	var content string
 	var title, status string
 	err = tx.QueryRow(ctx, `SELECT v.content,v.title,v.status FROM prd_versions v JOIN prds d ON d.id=v.prd_id JOIN projects p ON p.id=d.project_id WHERE d.id=$1 AND p.user_id=$2 AND v.id=$3`, id, user, versionID).Scan(&content, &title, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
